@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ad Studio</title>
+<style>
+:root{--bg:#0f0f12;--panel:#17171c;--card:#1d1d24;--line:#2a2a33;--fg:#ececf1;--mut:#9a9aa6;--acc:#e0403a;--ok:#3fb27f;--warn:#f5c542}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,system-ui,sans-serif}
+header{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);display:flex;gap:10px;align-items:center;padding:8px 14px;flex-wrap:wrap}
+header b{font-size:17px;margin-right:6px}nav{display:flex;gap:4px;flex-wrap:wrap}
+button{background:var(--card);color:var(--fg);border:1px solid #34343f;border-radius:8px;padding:6px 11px;cursor:pointer;font:inherit}
+button:hover{border-color:var(--acc)}nav button.on{border-color:var(--acc);color:#fff;background:#2a1a1a}button.small{padding:3px 8px;font-size:12px}
+.sp{flex:1}.mut{color:var(--mut)}.warn{color:var(--warn)}
+textarea{background:var(--card);color:var(--fg);border:1px solid #34343f;border-radius:7px;padding:7px 9px;font:inherit;width:100%;min-height:64px;resize:vertical}
+textarea.has{border-color:#6b5a1d}
+.k{display:block;color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin:12px 0 3px}
+.box{background:var(--card);border-radius:8px;padding:9px 11px;white-space:pre-wrap;font-size:13px;color:#d4d4dc}
+main{padding:14px}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px}
+.card img.big{width:100%;border-radius:8px;background:#000;display:block;cursor:zoom-in;margin-top:8px}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.tag{display:inline-block;background:#26262e;border-radius:6px;padding:1px 7px;margin:1px;font-size:12px}
+.shots{display:flex;flex-direction:column;gap:12px}
+.strip{display:flex;gap:6px;overflow-x:auto;padding:6px 2px 10px;border-top:1px solid var(--line)}
+.th{position:relative;flex:0 0 auto;width:78px;cursor:pointer;border:2px solid transparent;border-radius:6px;overflow:hidden;background:#000;aspect-ratio:9/16}
+.th img{width:100%;height:100%;object-fit:cover;display:block;opacity:.8}.th.on{border-color:var(--acc)}.th.on img{opacity:1}
+.th span{position:absolute;left:3px;top:3px;background:#000c;padding:0 5px;border-radius:4px;font-size:11px}
+.th .pid{left:auto;right:3px;top:auto;bottom:3px;color:var(--mut)}
+.th.noted::after{content:"";position:absolute;right:4px;top:4px;width:9px;height:9px;border-radius:50%;background:var(--warn)}
+.detail{flex:1;min-width:0;display:flex;gap:16px;flex-wrap:wrap}
+.detail .media img,.detail .media video{height:62vh;max-width:100%;border-radius:10px;background:#000;display:block}
+.detail .info{flex:1;min-width:300px}.line{font-size:21px;font-weight:600;margin-top:6px}
+pre{white-space:pre-wrap;background:#111116;border:1px solid var(--line);border-radius:8px;padding:10px;font-size:12px;color:#cfcfd8;max-height:60vh;overflow:auto}
+.script{max-width:900px}.script h1,.script h2,.script h3{margin:1.2em 0 .4em}.script li{margin:2px 0}
+#banner{display:none;gap:10px;align-items:center;flex-wrap:wrap;padding:9px 14px;background:#2a2116;border-bottom:1px solid #6b4a1d}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#222;border:1px solid var(--line);padding:7px 14px;border-radius:9px;display:none;z-index:9}
+@media(max-width:800px){.detail .media img,.detail .media video{height:auto;width:100%}}
+</style></head><body>
+<header><b id="title">Ad Studio</b><nav id="tabs"></nav><span class="sp"></span>
+<span id="live" class="mut" title="The page refreshes by itself when the AI updates studio.js">● live</span>
+<button class="small" onclick="copyAll()">Copy all comments</button></header>
+<div id="banner"></div>
+<main id="main"><p class="mut">Loading…</p></main><div id="toast"></div>
+<script>
+/* Read-only viewer. The AI changes the project; this page only shows it. Comments live in this browser. */
+let P=null,F={},SIG="",tab="shots",cur=0;
+const ALLTABS=[["brief","Brief"],["story","Story"],["script","Script"],["voices","Voices"],["character","Characters"],["location","Locations"],["prop","Props"],["shots","Shots"]];
+const TABS_FOR=()=>ALLTABS;
+const $=s=>document.querySelector(s),esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const url=f=>`${encodeURI(f)}?v=${F[f]||0}`,has=f=>f&&F[f];
+const frameOf=s=>s.frame_file||`frames/f${s.id}.png`;
+const store={get(k,d){try{return JSON.parse(localStorage.getItem(k))??d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let C={};const ckey=()=>"adstudio-comments:"+(P?.title||"project");
+function toast(t){const e=$("#toast");e.textContent=t;e.style.display="block";clearTimeout(e._t);e._t=setTimeout(()=>e.style.display="none",1800)}
+/* Data comes from studio.js next to this page (window.STUDIO = {...}). It is re-read every few seconds,
+   so the page updates itself when the AI rewrites studio.js. Works straight from the file, no server. */
+function readData(){return new Promise((res,rej)=>{const sc=document.createElement("script");sc.src="studio.js?t="+Date.now();
+sc.onload=()=>{sc.remove();window.STUDIO?res(window.STUDIO):rej(new Error("studio.js has no STUDIO data"))};sc.onerror=()=>{sc.remove();rej(new Error("studio.js not found next to index.html"))};document.head.appendChild(sc)})}
+async function boot(){const d=await readData();P=d;F=d._files||{};SIG=JSON.stringify(d);C=store.get(ckey(),{});tab=store.get("adstudio-tab","shots");
+$("#title").textContent="Ad Studio · "+(P.title||"Project");document.title=(P.title||"Ad Studio")+" — Ad Studio";render();setInterval(poll,4000)}
+async function poll(){try{const d=await readData();const sig=JSON.stringify(d);
+$("#live").style.color="";if(sig===SIG)return;P=d;F=d._files||{};SIG=sig;
+if(document.activeElement&&document.activeElement.tagName==="TEXTAREA"){toast("Project updated — it will refresh when you click away");return}render();toast("Project updated")}catch(e){$("#live").style.color="var(--acc)"}}
+document.addEventListener("focusout",e=>{if(e.target.tagName==="TEXTAREA")setTimeout(()=>{if(document.activeElement.tagName!=="TEXTAREA")render()},50)});
+function setTab(t){tab=t;store.set("adstudio-tab",t);render();scrollTo(0,0)}
+function render(){const TABS=TABS_FOR();if(!TABS.some(([k])=>k===tab))tab=TABS[0][0];banner();$("#tabs").innerHTML=TABS.map(([k,n])=>`<button class="${k===tab?"on":""}" onclick="setTab('${k}')">${n}</button>`).join("");
+({brief:rBrief,story:rStory,script:rScript,voices:rVoices,character:rLib,location:rLib,prop:rLib,shots:rShots})[tab]()}
+function banner(){const r=P.review,b=$("#banner");if(!r||!(r.step||r.message)){b.style.display="none";return}
+const t=ALLTABS.find(([k])=>k===r.tab);b.style.display="flex";
+b.innerHTML=`<b>Now reviewing:</b><span>${esc(r.step||"")}</span>${r.message?`<span class="mut">— ${esc(r.message)}</span>`:""}<span class="sp"></span>${t&&r.tab!==tab?`<button class="small" onclick="setTab('${r.tab}')">Open ${esc(t[1])}</button>`:""}`}
+/* comments */
+function cbox(id,label){const v=C[id]||"";return `<span class="k">${esc(label||"Your comment")}</span><textarea class="${v?"has":""}" data-c="${esc(id)}" placeholder="Write what should change, then use “Copy all comments” and paste it into the chat.">${esc(v)}</textarea>`}
+document.addEventListener("input",e=>{const id=e.target.dataset?.c;if(!id)return;const v=e.target.value;if(v)C[id]=v;else delete C[id];store.set(ckey(),C);e.target.classList.toggle("has",!!v);
+if(id.startsWith("Shot ")){const i=P.shots.findIndex(s=>"Shot "+s.id===id);document.querySelectorAll(".th")[i]?.classList.toggle("noted",!!v)}});
+function copyAll(){const st=P.story||{};const order=["Brief",...(st.pitches||[]).map(x=>"Pitch "+(x.id||x.title)),"Story beats","Script",
+...(P.voices||[]).map(v=>"Voice "+v.key),...(P.library||[]).map(i=>i.name),...(P.shots||[]).map(s=>"Shot "+s.id)];
+const keys=Object.keys(C).sort((a,b)=>(order.indexOf(a)+1||999)-(order.indexOf(b)+1||999));
+const t=keys.map(k=>`${k}: ${C[k]}`).join("\n");if(!t)return toast("No comments yet");
+navigator.clipboard.writeText(t).then(()=>toast(`Copied ${keys.length} comment${keys.length>1?"s":""} — paste them into the chat`),()=>prompt("Copy:",t))}
+/* script: tiny markdown */
+function md(s){const out=[];let list=false;for(const raw of String(s||"").split("\n")){const l=esc(raw).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").replace(/`(.+?)`/g,"<code>$1</code>");
+if(/^\s*[-*] /.test(raw)){if(!list){out.push("<ul>");list=true}out.push("<li>"+l.replace(/^\s*[-*] /,"")+"</li>");continue}if(list){out.push("</ul>");list=false}
+const h=raw.match(/^(#{1,3}) /);out.push(h?`<h${h[1].length}>${l.slice(h[1].length+1)}</h${h[1].length}>`:(raw.trim()?`<p>${l}</p>`:""))}if(list)out.push("</ul>");return out.join("")}
+function rScript(){$("#main").innerHTML=`<div class="card script">${md(P.script)}${P.style?`<span class="k">Style line used in every prompt</span><div class="box">${esc(P.style)}</div>`:""}${cbox("Script","Comment on the script")}</div>`}
+function rVoices(){$("#main").innerHTML=`<p class="mut">Each description is pasted word for word into every frame prompt where that character speaks.</p><div class="grid">${(P.voices||[]).map(v=>`<div class="card"><div class="row"><b>${esc(v.label||v.key)}</b><span class="tag">${esc(v.key)}</span></div><div class="box" style="margin-top:8px">${esc(v.desc)}</div>${cbox("Voice "+v.key)}</div>`).join("")}</div>`}
+function rLib(){const items=(P.library||[]).filter(it=>it.kind===tab);
+$("#main").innerHTML=items.length?`<div class="grid">${items.map(it=>`<div class="card"><div class="row"><b>${esc(it.name)}</b><span class="tag">${esc(it.key)}</span></div>
+${has(it.file)?`<img class="big" src="${url(it.file)}" onclick="open('${url(it.file)}')">`:`<p class="warn">No image yet</p>`}
+${it.extra||it.rule?`<span class="k">${it.kind==="location"?"Added to every shot here":"Rule for every shot with this character"}</span><div class="box">${esc(it.extra||it.rule)}</div>`:""}
+${it.prompt?`<details><summary class="mut" style="margin-top:10px;cursor:pointer">Prompt</summary><pre>${esc(it.prompt)}</pre></details>`:""}
+${cbox(it.name)}</div>`).join("")}</div>`:`<p class="mut">Nothing here yet.</p>`}
+const libName=k=>((P.library||[]).find(x=>x.key===k)||{}).name||k;const voiceLabel=k=>((P.voices||[]).find(v=>v.key===k)||{}).label||k;
+function rShots(){const S=P.shots||[];if(!S.length){$("#main").innerHTML=`<p class="mut">No shots yet.</p>`;return}if(cur>=S.length)cur=S.length-1;const s=S[cur];
+$("#main").innerHTML=`<div class="shots"><div class="detail"><div class="media">${has(frameOf(s))?`<img src="${url(frameOf(s))}">`:`<div class="card warn" style="width:300px;height:520px">No frame yet</div>`}</div>
+<div class="info"><div class="row"><b style="font-size:18px">Shot ${esc(s.id)}</b><span class="mut">${cur+1} of ${S.length}${s.dur?" · "+s.dur+" s":""}</span><span class="sp"></span>
+<button class="small" onclick="go(-1)">◀ Prev</button><button class="small" onclick="go(1)">Next ▶</button></div>
+<div class="line">${s.line?`“${esc(s.line)}”`:`<span class="mut">(no line)</span>`}</div>${s.voice?`<div class="mut">${esc(voiceLabel(s.voice))}</div>`:""}
+${cbox("Shot "+s.id,"Your comment on this shot")}
+<span class="k">Opening frame</span><div class="box">${esc(s.frame)}</div>
+<span class="k">Action in the scene</span><div class="box">${esc(s.action)}</div>
+<span class="k">References</span><div>${(s.refs||[]).map(k=>{const it=(P.library||[]).find(x=>x.key===k);return it&&has(it.file)?`<img src="${url(it.file)}" title="${esc(it.name)}" style="height:56px;border-radius:5px;margin:3px 3px 0 0">`:`<span class="tag">${esc(libName(k))}</span>`}).join("")}</div>
+${s.prompt?`<details><summary class="mut" style="margin-top:12px;cursor:pointer">Frame prompt</summary><pre>${esc(s.prompt)}</pre></details>`:""}</div></div><div class="strip">${S.map((x,i)=>`<div class="th ${i===cur?"on":""} ${C["Shot "+x.id]?"noted":""}" onclick="cur=${i};render()" title="${esc(x.line||x.action)}">
+${has(frameOf(x))?`<img src="${url(frameOf(x))}" loading="lazy">`:""}<span>${esc(x.id)}</span></div>`).join("")}</div></div>`;
+document.querySelectorAll(".th")[cur]?.scrollIntoView({block:"nearest",inline:"center"})}
+function go(d){cur=(cur+d+P.shots.length)%P.shots.length;render()}
+document.addEventListener("keydown",e=>{if(tab!=="shots"||e.target.tagName==="TEXTAREA")return;if(e.key==="ArrowRight")go(1);if(e.key==="ArrowLeft")go(-1)});
+/* brief */
+function kv(v){if(Array.isArray(v))return `<ul>${v.map(x=>`<li>${esc(x)}</li>`).join("")}</ul>`;if(v&&typeof v==="object")return Object.entries(v).map(([k,x])=>`<span class="k">${esc(k.replace(/_/g," "))}</span>${kv(x)}`).join("");return `<div class="box">${esc(v)}</div>`}
+function rBrief(){const b=P.brief;$("#main").innerHTML=`<div class="card script">${!b?`<p class="mut">No brief yet.</p>`:typeof b==="string"?md(b):kv(b)}${cbox("Brief","Comment on the brief")}</div>`}
+/* story */
+function rStory(){const st=P.story||{};const pit=st.pitches||[];
+$("#main").innerHTML=(pit.length?`<h3 style="margin-top:0">Ideas</h3><div class="grid">${pit.map(x=>{const id=x.id||x.title,on=st.chosen&&st.chosen===id;return `<div class="card" style="${on?"border-color:var(--ok)":""}">
+<div class="row"><b>${esc(x.title||id)}</b>${on?`<span class="tag" style="background:#173a2a;color:var(--ok)">Chosen</span>`:""}</div>
+${x.logline?`<p>${esc(x.logline)}</p>`:""}${x.text?`<div class="box">${esc(x.text)}</div>`:""}${cbox("Pitch "+id)}</div>`}).join("")}</div>`:"")
++((st.beats||[]).length?`<h3>Story beats</h3><div class="card">${st.beats.map((b,i)=>`<div style="margin:8px 0"><b>${i+1}. ${esc(b.name||"")}</b>${b.share?` <span class="mut">(${esc(b.share)})</span>`:""}<div class="box" style="margin-top:4px">${esc(b.text||"")}</div></div>`).join("")}${cbox("Story beats","Comment on the beats")}</div>`:"")
+||`<p class="mut">No story yet.</p>`}
+
+boot().catch(e=>$("#main").innerHTML=`<p class="warn">Could not load studio.js: ${esc(e.message)}</p>`);
+</script></body></html>

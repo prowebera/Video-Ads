@@ -1,0 +1,28 @@
+# Local credentials and environment files
+.env
+.env.*
+*.env
+*.env.*
+!.env.example
+!*.env.example
+.zshrc
+.bashrc
+.profile
+*credentials*
+*secrets*
+*.pem
+*.key
+
+# Local upload cache and generated project files
+.kie-upload-cache*
+/project.json
+assets/
+clips/
+seedance/
+prompts/
+
+# System and Python cache files
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
